@@ -1,13 +1,15 @@
 import React from 'react';
 import Particles from 'react-particles-js';
 // import Clarifai from 'clarifai';
-import Navigation from './components/Navigation';
+import Navigation from './components/Navigation/Navigation';
 import Logo from './components/Logo/Logo'
 import Rank from './components/Rank/Rank'
 import Signin from './components/Signin/Signin'
 import Register from './components/Register/Register'
 import FaceRecognition from './components/FaceRecognition/FaceRecognition'
 import ImageLinkForm from './components/ImageLinkForm/ImageLinkForm'
+import Modal from './components/Modal/Modal';
+import Profile from './components/Profile/Profile';
 import './App.css';
 
 const particlesOptions = {
@@ -28,12 +30,15 @@ const initialState = {
   boxes: [],
   route: 'signin',
   isSignedIn: false,
+  isProfileOpen: false,
   user: {
     id: '',
     name: '',
     email: '',
     entries: 0,
-    joined: ''
+    joined: '',
+    pet: '',
+    age: 0,
   }
 }
 
@@ -41,6 +46,40 @@ class App extends React.Component {
   constructor() {
     super();
     this.state = initialState;
+  }
+
+  componentDidMount() {
+    const token = window.sessionStorage.getItem('token');
+    if (token) {
+      fetch('http://localhost:3000/signin', {
+        method: 'post',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+        }
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.id) {
+            fetch(`http://localhost:3000/profile/${data.id}`, {
+              method: 'get',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token,
+              }
+            })
+              .then(response => response.json())
+              .then(user => {
+                if (user && user.email) {
+                  this.loadUser(user);
+                  this.onRouteChange('home');
+                }
+              })
+              .catch(console.log);
+          } 
+        })
+        .catch(console.log);
+    }
   }
 
   loadUser = (data) => {
@@ -51,11 +90,14 @@ class App extends React.Component {
         email: data.email,
         entries: data.entries,
         joined: data.joined,
+        age: data.age,
+        pet: data.pet,
       }
     })
   }
 
   calculateFaceLocations = (data) => {
+    if (!data || !data.outputs) return;
     return data.outputs[0].data.regions.map(face => {
       const clarifaiFace = face.region_info.bounding_box;
       const image = document.getElementById('inputimage');
@@ -72,7 +114,9 @@ class App extends React.Component {
   }
 
   displayFaceBoxes = (boxes) => {
-    this.setState({ boxes: boxes });
+    if (boxes) {
+      this.setState({ boxes: boxes });
+    }
   }
 
   onInputChange = (event) => {
@@ -81,9 +125,13 @@ class App extends React.Component {
 
   onPictureSubmit = () => {
     this.setState({ imageUrl: this.state.input })
-    fetch('https://smart-brain-api-8338.herokuapp.com/imageurl', {
+    // fetch('https://smart-brain-api-8338.herokuapp.com/imageurl', {
+    fetch('http://localhost:3000/imageurl', {
       method: 'post',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': window.sessionStorage.getItem('token'),
+      },
       body: JSON.stringify({
         input: this.state.input
       })
@@ -91,9 +139,13 @@ class App extends React.Component {
       .then(resp => resp.json())
       .then(response => {
         if (response) {
-          fetch('https://smart-brain-api-8338.herokuapp.com/image', {
+          // fetch('https://smart-brain-api-8338.herokuapp.com/image', {
+          fetch('http://localhost:3000/image', {
             method: 'put',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': window.sessionStorage.getItem('token'),
+            },
             body: JSON.stringify({
               id: this.state.user.id
             })
@@ -103,32 +155,62 @@ class App extends React.Component {
               this.setState(Object.assign(this.state.user, { entries: count }))
             })
             .catch(console.log)
-
         }
-        console.log(response);
+        console.log(response); // for debugging
         this.displayFaceBoxes(this.calculateFaceLocations(response))
       })
       .catch(err => console.log(err))
-    
   }
 
   onRouteChange = (route) => {
     if (route === 'signout') {
-      this.setState(initialState)
+      const token = window.sessionStorage.getItem('token');
+      fetch('http://localhost:3000/signout', {
+        method: 'post',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+        }
+      })
+        .then(response => { 
+          window.sessionStorage.removeItem('token');
+          console.log(response.json())
+        })
+        .catch(console.log);
+      return this.setState(initialState)
     } else if (route === 'home') {
       this.setState({ isSignedIn: true })
     }
     this.setState({ route: route });
   }
 
+  toggleModal = () => {
+    this.setState(prevState => ({
+      ...prevState,
+      isProfileOpen: !prevState.isProfileOpen
+    }))
+  }
+
   render() {
-    const { isSignedIn, imageUrl, route, boxes } = this.state;
+    const { isSignedIn, imageUrl, route, boxes, isProfileOpen, user } = this.state;
     return (
       <div className="App" >
         <Particles className='particles'
           params={particlesOptions}
         />
-        <Navigation isSignedIn={isSignedIn} onRouteChange={this.onRouteChange} />
+        <Navigation isSignedIn={isSignedIn} onRouteChange={this.onRouteChange} 
+          toggleModal={this.toggleModal}
+        />
+        { isProfileOpen && 
+          <Modal>
+            <Profile 
+              isProfileOpen={isProfileOpen} 
+              toggleModal={this.toggleModal} 
+              loadUser={this.loadUser}
+              user={user}  
+            />
+          </Modal>
+        }
         {route === 'home'
           ? <div>
             <Logo />

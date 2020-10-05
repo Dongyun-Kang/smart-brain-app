@@ -17,9 +17,14 @@ class Signin extends React.Component {
     this.setState({ signInPassword: event.target.value })
   }
 
+  saveAuthTokenInSession = (token) => {
+    // window.localStorage.setItem('token', token);
+    window.sessionStorage.setItem('token', token);
+  }
+
   onSubmitSignIn = () => {
-    console.log(this.state)
-    fetch('https://smart-brain-api-8338.herokuapp.com/signin', {
+    // fetch('https://smart-brain-api-8338.herokuapp.com/signin', {
+    fetch('http://localhost:3000/signin', {
       method: 'post',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -28,10 +33,26 @@ class Signin extends React.Component {
       })
     })
       .then(res => res.json())
-      .then(user => {
-        if (user.id) {
-          this.props.loadUser(user);
-          this.props.onRouteChange('home');
+      .then(data => {
+        if (data.userId && data.success === 'true') {
+          this.saveAuthTokenInSession(data.token);
+          fetch(`http://localhost:3000/profile/${data.userId}`, {
+            method: 'get',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': data.token,
+            }
+          })
+            .then(response => response.json())
+            .then(user => {
+              if (user && user.email) {
+                this.props.loadUser(user);
+                this.props.onRouteChange('home');
+              }
+            })
+            .catch(console.log);
+          // this.props.loadUser(data);
+          // this.props.onRouteChange('home');
         }
       })
   }
